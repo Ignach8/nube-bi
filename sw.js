@@ -1,5 +1,5 @@
 // Service worker: deja la app disponible sin conexión y abre al instante.
-const VERSION = "nubebi-v1";
+const VERSION = "nubebi-v2";
 const SHELL = [
   "./",
   "./index.html",
@@ -14,7 +14,7 @@ const SHELL = [
 const CDN_HOSTS = ["cdnjs.cloudflare.com"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
@@ -45,7 +45,8 @@ self.addEventListener("fetch", (event) => {
   // Archivos propios: primero la red (siempre la última versión), caché si no hay conexión.
   if (url.origin === self.location.origin) {
     event.respondWith(
-      fetch(req).then((res) => {
+      // "no-cache" obliga a preguntar al servidor si hay versión nueva (GitHub Pages guarda 10 min).
+      fetch(req, { cache: "no-cache" }).then((res) => {
         if (res.ok) {
           const copy = res.clone();
           caches.open(VERSION).then((c) => c.put(req, copy));
