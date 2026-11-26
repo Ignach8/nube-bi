@@ -362,6 +362,13 @@
     try {
       const fields = "id,name,modifiedTime,md5Checksum,appProperties";
       let initUrl, method, meta;
+      if (!rec.driveId) {
+        // Si en Drive ya hay un archivo de la app con ese nombre (subido desde otro
+        // dispositivo), se actualiza ese en vez de crear un duplicado.
+        const q = `name='${rec.name.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}' and appProperties has { key='${APP_KEY}' and value='1' } and trashed=false`;
+        const found = await (await api(`${API}/files?q=${encodeURIComponent(q)}&fields=files(id)&spaces=drive`)).json();
+        if (found.files[0]) rec = { ...rec, driveId: found.files[0].id };
+      }
       if (rec.driveId) {
         initUrl = `${UPLOAD}/files/${rec.driveId}?uploadType=resumable&fields=${fields}`;
         method = "PATCH";
@@ -383,6 +390,10 @@
       const res = await fetch(loc, { method: "PUT", body: blob });
       if (!res.ok) throw new Error(`Subida falló (${res.status})`);
       const f = await res.json();
+      // Si sync ya había traído ese mismo archivo como registro aparte, se quita el duplicado.
+      for (const other of [...state.datasets.values()]) {
+        if (other.id !== rec.id && other.driveId === f.id) await removeDataset(other.id);
+      }
       const updated = { ...state.datasets.get(rec.id), source: "drive", driveId: f.id, md5: f.md5Checksum, modifiedTime: f.modifiedTime };
       await saveDataset(updated);
       render();
